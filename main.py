@@ -43,6 +43,8 @@ def main():
     parser.add_argument("--list-models", action="store_true", help="사용 가능한 모델 목록 표시")
     parser.add_argument("--text-only", action="store_true", help="텍스트만 추출하여 번역 (멀티모달 번역 비활성화)")
     parser.add_argument("--pdf-output", action="store_true", help="번역 결과를 PDF 파일로 저장 (멀티모달 모드에서만 사용 가능)")
+    parser.add_argument("--preserve-layout", action="store_true", default=True, help="원본 PDF의 레이아웃을 최대한 보존 (기본값: 활성화)")
+    parser.add_argument("--no-preserve-layout", action="store_false", dest="preserve_layout", help="원본 PDF의 레이아웃을 보존하지 않음")
     
     args = parser.parse_args()
     
@@ -112,7 +114,8 @@ def main():
                 pdf_path=args.pdf_file,
                 output_path=output_path,
                 target_language=args.language,
-                text_only=False
+                text_only=False,
+                preserve_layout=args.preserve_layout
             )
             print(f"번역이 완료되었습니다. 결과는 {output_path}에 저장되었습니다.")
         
