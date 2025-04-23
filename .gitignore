@@ -6,3 +6,12 @@
 *.pdf_translated.pdf
 *.pdf_translated.txt
 *.pdf_translated.pdf
+
+# python
+**/__pycache__
+**/__pycache__/**
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.pyw
+**/*.pyz
