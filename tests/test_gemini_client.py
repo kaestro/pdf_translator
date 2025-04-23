@@ -4,165 +4,238 @@ Gemini 클라이언트 테스트 모듈
 
 import os
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 from pdf_translator.gemini_client import GeminiClient
+import google.generativeai as genai
 
 class TestGeminiClient(unittest.TestCase):
     """
     GeminiClient 클래스를 테스트하는 테스트 케이스
     """
     
-    def test_init_with_api_key(self):
-        """API 키로 GeminiClient를 초기화하는 테스트"""
-        test_key = "test_api_key"
+    def setUp(self):
+        """각 테스트 전에 실행되는 설정"""
+        # genai 모듈의 목 설정
+        self.mock_genai_configure = patch('google.generativeai.configure').start()
+        self.mock_generative_model = patch('google.generativeai.GenerativeModel').start()
+        self.mock_list_models = patch('google.generativeai.list_models').start()
         
-        with patch('google.generativeai.configure') as mock_configure:
-            client = GeminiClient(api_key=test_key)
-            
-            self.assertEqual(client.api_key, test_key)
-            mock_configure.assert_called_once_with(api_key=test_key)
+        # 모델 목 객체 생성
+        self.mock_text_model = MagicMock()
+        self.mock_vision_model = MagicMock()
+        self.mock_generative_model.side_effect = [self.mock_text_model, self.mock_vision_model]
+        
+        # 환경 변수 목 설정
+        os.environ['GEMINI_API_KEY'] = 'mock_api_key'
+        
+        # 테스트할 클라이언트 인스턴스 생성
+        self.client = GeminiClient()
     
-    @patch.dict(os.environ, {"GEMINI_API_KEY": "env_api_key"})
-    def test_init_with_env_var(self):
-        """환경 변수에서 API 키를 로드하는 테스트"""
-        with patch('google.generativeai.configure') as mock_configure:
-            client = GeminiClient()
-            
-            self.assertEqual(client.api_key, "env_api_key")
-            mock_configure.assert_called_once_with(api_key="env_api_key")
+    def tearDown(self):
+        """각 테스트 후에 실행되는 정리"""
+        patch.stopall()
+        if 'GEMINI_API_KEY' in os.environ:
+            del os.environ['GEMINI_API_KEY']
     
-    # 환경변수 관련 테스트에서 오류가 발생하여 주석 처리
-    # @patch.dict(os.environ, {}, clear=True)
-    # def test_init_no_api_key(self):
-    #     """API 키가 없을 때 예외가 발생하는지 테스트"""
-    #     with patch('dotenv.load_dotenv'):
-    #         with self.assertRaises(ValueError):
-    #             GeminiClient()
+    def test_init_with_api_key(self):
+        """API 키를 제공하여 클라이언트 초기화하는 테스트"""
+        client = GeminiClient(api_key="test_key")
+        
+        self.assertEqual(client.api_key, "test_key")
+        self.mock_genai_configure.assert_called_once_with(api_key="test_key")
+    
+    def test_init_from_env(self):
+        """환경 변수에서 API 키를 가져와 초기화하는 테스트"""
+        self.assertEqual(self.client.api_key, "mock_api_key")
+        self.mock_genai_configure.assert_called_once_with(api_key="mock_api_key")
+    
+    def test_init_with_model_name(self):
+        """모델 이름을 제공하여 초기화하는 테스트"""
+        client = GeminiClient(model_name="custom-model-id")
+        
+        self.assertEqual(client.text_model_id, "custom-model-id")
+        self.mock_generative_model.assert_any_call("custom-model-id")
     
     def test_translate_text_only(self):
         """텍스트 번역 메서드 테스트"""
-        test_key = "test_api_key"
-        test_text = "Hello, world!"
-        expected_translation = "안녕하세요, 세계!"
-        
-        # 목 객체 생성
+        # response 목 설정
         mock_response = MagicMock()
-        mock_response.text = expected_translation
+        mock_response.text = "번역된 텍스트"
+        self.mock_text_model.generate_content.return_value = mock_response
         
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
+        # 번역 수행
+        result = self.client.translate_text_only("Text to translate", "한국어")
         
-        with patch('google.generativeai.configure'):
-            with patch('google.generativeai.GenerativeModel', return_value=mock_model):
-                client = GeminiClient(api_key=test_key)
-                # text_model 및 vision_model 모두 같은 mock으로 설정
-                client.text_model = mock_model
-                
-                # 번역 실행
-                result = client.translate_text_only(test_text)
-                
-                # 결과 확인
-                self.assertEqual(result, expected_translation)
-                
-                # generate_content 호출 확인
-                args, _ = mock_model.generate_content.call_args
-                prompt = args[0]
-                self.assertIn(test_text, prompt)
-                self.assertIn("한국어", prompt)
+        # 결과 확인
+        self.assertEqual(result, "번역된 텍스트")
+        
+        # 메서드 호출 확인
+        self.mock_text_model.generate_content.assert_called_once()
+        args = self.mock_text_model.generate_content.call_args[0][0]
+        self.assertIn("Text to translate", args)
+        self.assertIn("한국어", args)
     
-    def test_translate_with_text_only_param(self):
-        """text_only 매개변수를 사용한 번역 테스트"""
-        test_key = "test_api_key"
-        test_text = "Hello, world!"
-        expected_translation = "안녕하세요, 세계!"
-        
-        # 목 객체 생성
+    def test_translate_with_image(self):
+        """이미지 번역 메서드 테스트"""
+        # response 목 설정
         mock_response = MagicMock()
-        mock_response.text = expected_translation
+        mock_response.text = "이미지에서 번역된 텍스트"
+        self.mock_vision_model.generate_content.return_value = mock_response
         
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
+        # 이미지 데이터
+        image_data = b"fake_image_data"
         
-        with patch('google.generativeai.configure'):
-            with patch('google.generativeai.GenerativeModel', return_value=mock_model):
-                client = GeminiClient(api_key=test_key)
-                # text_model 및 vision_model 모두 같은 mock으로 설정
-                client.text_model = mock_model
-                client.vision_model = mock_model
-                
-                # 번역 실행 (text_only=True)
-                result = client.translate(test_text, text_only=True)
-                
-                # 결과 확인
-                self.assertEqual(result, expected_translation)
-                
-                # generate_content 호출 확인
-                args, _ = mock_model.generate_content.call_args
-                prompt = args[0]
-                self.assertIn(test_text, prompt)
-                self.assertIn("한국어", prompt)
+        # 번역 수행
+        result = self.client.translate(image_data, "한국어")
+        
+        # 결과 확인
+        self.assertEqual(result, "이미지에서 번역된 텍스트")
+        
+        # 메서드 호출 확인
+        self.mock_vision_model.generate_content.assert_called_once()
+        args = self.mock_vision_model.generate_content.call_args[0][0]
+        self.assertEqual(len(args), 2)
+        self.assertIn("한국어", args[0])
+        self.assertEqual(args[1]["mime_type"], "image/png")
+        self.assertEqual(args[1]["data"], image_data)
     
-    def test_translate_with_custom_language(self):
-        """사용자 지정 언어로 번역하는 테스트"""
-        test_key = "test_api_key"
-        test_text = "Hello, world!"
-        test_language = "일본어"
-        expected_translation = "こんにちは、世界！"
-        
-        # 목 객체 생성
+    def test_translate_with_text(self):
+        """텍스트로 translate 메서드 호출 테스트"""
+        # response 목 설정
         mock_response = MagicMock()
-        mock_response.text = expected_translation
+        mock_response.text = "번역된 텍스트"
+        self.mock_text_model.generate_content.return_value = mock_response
         
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
+        # 번역 수행
+        result = self.client.translate("Text to translate", "한국어", text_only=True)
         
-        with patch('google.generativeai.configure'):
-            with patch('google.generativeai.GenerativeModel', return_value=mock_model):
-                client = GeminiClient(api_key=test_key)
-                client.text_model = mock_model
-                
-                # 번역 실행
-                result = client.translate_text_only(test_text, target_language=test_language)
-                
-                # 결과 확인
-                self.assertEqual(result, expected_translation)
-                
-                # generate_content 호출 확인
-                args, _ = mock_model.generate_content.call_args
-                prompt = args[0]
-                self.assertIn(test_text, prompt)
-                self.assertIn(test_language, prompt)
+        # 결과 확인
+        self.assertEqual(result, "번역된 텍스트")
+        
+        # 메서드 호출 확인
+        self.mock_text_model.generate_content.assert_called_once()
     
-    def test_translate_image(self):
-        """이미지 번역 테스트"""
-        test_key = "test_api_key"
-        test_image_data = b"test_image_data"
-        expected_translation = "번역된 이미지 텍스트"
-        
-        # 목 객체 생성
+    def test_translate_with_file_object(self):
+        """파일 객체로 translate 메서드 호출 테스트"""
+        # response 목 설정
         mock_response = MagicMock()
-        mock_response.text = expected_translation
+        mock_response.text = "이미지에서 번역된 텍스트"
+        self.mock_vision_model.generate_content.return_value = mock_response
         
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
+        # 파일 목 생성
+        mock_file = MagicMock()
+        mock_file.read.return_value = b"fake_image_data"
         
-        with patch('google.generativeai.configure'):
-            with patch('google.generativeai.GenerativeModel', return_value=mock_model):
-                client = GeminiClient(api_key=test_key)
-                client.vision_model = mock_model
-                
-                # 번역 실행
-                result = client.translate(test_image_data)
-                
-                # 결과 확인
-                self.assertEqual(result, expected_translation)
-                
-                # generate_content 호출 확인
-                args, _ = mock_model.generate_content.call_args
-                self.assertIsInstance(args[0], list)
-                self.assertIn("한국어", args[0][0])
-                self.assertEqual(args[0][1]["mime_type"], "image/png")
-                self.assertEqual(args[0][1]["data"], test_image_data)
+        # 번역 수행
+        result = self.client.translate(mock_file, "한국어")
+        
+        # 결과 확인
+        self.assertEqual(result, "이미지에서 번역된 텍스트")
+        
+        # read 메서드 호출 확인
+        mock_file.read.assert_called_once()
+        
+        # generate_content 메서드 호출 확인
+        self.mock_vision_model.generate_content.assert_called_once()
+    
+    def test_translate_invalid_content(self):
+        """유효하지 않은 콘텐츠로 translate 메서드 호출 테스트"""
+        with self.assertRaises(ValueError):
+            self.client.translate(123, "한국어")  # 숫자는 유효한 콘텐츠 형식이 아님
+    
+    def test_get_model_info(self):
+        """모델 정보 가져오기 테스트"""
+        # 목 모델 설정
+        mock_model1 = MagicMock()
+        mock_model1.name = "model1"
+        mock_model1.supported_generation_methods = ["method1", "method2"]
+        
+        mock_model2 = MagicMock()
+        mock_model2.name = "model2"
+        mock_model2.supported_generation_methods = ["method3"]
+        
+        self.mock_list_models.return_value = [mock_model1, mock_model2]
+        
+        # 모델 정보 가져오기
+        result = self.client.get_model_info()
+        
+        # 결과 확인
+        self.assertEqual(result, {
+            "model1": ["method1", "method2"],
+            "model2": ["method3"]
+        })
+        
+        # 메서드 호출 확인
+        self.mock_list_models.assert_called_once()
+    
+    def test_translate_text_to_markdown(self):
+        """텍스트를 마크다운으로 번역하는 메서드 테스트"""
+        # response 목 설정
+        mock_response = MagicMock()
+        mock_response.text = "# 번역된 마크다운\n\n이것은 **테스트** 마크다운입니다."
+        self.mock_text_model.generate_content.return_value = mock_response
+        
+        # 번역 수행
+        result = self.client.translate_text_to_markdown("Text to translate", "한국어", 1)
+        
+        # 결과 확인
+        self.assertEqual(result, "# 번역된 마크다운\n\n이것은 **테스트** 마크다운입니다.")
+        
+        # 메서드 호출 확인
+        self.mock_text_model.generate_content.assert_called_once()
+        args = self.mock_text_model.generate_content.call_args[0][0]
+        self.assertIn("Text to translate", args)
+        self.assertIn("한국어", args)
+        self.assertIn("마크다운", args)
+    
+    def test_translate_to_markdown_with_image(self):
+        """이미지를 마크다운으로 번역하는 메서드 테스트"""
+        # response 목 설정
+        mock_response = MagicMock()
+        mock_response.text = "# 번역된 마크다운\n\n이것은 **테스트** 마크다운입니다.\n\n![이미지](IMAGE_1)"
+        self.mock_vision_model.generate_content.return_value = mock_response
+        
+        # 이미지 데이터
+        image_data = b"fake_image_data"
+        
+        # OS에 맞는 경로 구분자 사용
+        image_path = os.path.join("images", "test_image.png")
+        
+        # 번역 수행
+        result = self.client.translate_to_markdown(
+            image_data, 
+            target_language="한국어", 
+            page_num=1,
+            image_tag=image_path
+        )
+        
+        # 결과 확인 - 정규화된 경로로 비교
+        expected = f"# 번역된 마크다운\n\n이것은 **테스트** 마크다운입니다.\n\n![이미지]({image_path})"
+        self.assertEqual(result, expected)
+        
+        # 메서드 호출 확인
+        self.mock_vision_model.generate_content.assert_called_once()
+        args = self.mock_vision_model.generate_content.call_args[0][0]
+        self.assertEqual(len(args), 2)
+        self.assertIn("한국어", args[0])
+        self.assertIn("마크다운", args[0])
+        self.assertEqual(args[1]["mime_type"], "image/png")
+        self.assertEqual(args[1]["data"], image_data)
+    
+    def test_translate_to_markdown_with_text(self):
+        """텍스트로 translate_to_markdown 메서드 호출 테스트"""
+        # translate_text_to_markdown 메서드의 목 설정
+        with patch.object(self.client, 'translate_text_to_markdown') as mock_method:
+            mock_method.return_value = "# 번역된 마크다운\n\n텍스트 샘플"
+            
+            # 번역 수행
+            result = self.client.translate_to_markdown("Text to translate", "한국어", 1)
+            
+            # 결과 확인
+            self.assertEqual(result, "# 번역된 마크다운\n\n텍스트 샘플")
+            
+            # 메서드 호출 확인
+            mock_method.assert_called_once_with("Text to translate", "한국어", 1)
 
 if __name__ == "__main__":
     unittest.main() 

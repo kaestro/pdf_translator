@@ -343,6 +343,115 @@ class PDFProcessor:
         
         return [(page_num, translated) for page_num, translated, _ in translated_results]
     
+    def translate_to_markdown(self, pdf_path: str, output_path: Optional[str] = None, 
+                             target_language: str = "한국어", save_images: bool = True) -> str:
+        """
+        PDF 파일을 번역하고 마크다운 형식으로 변환합니다.
+        
+        Args:
+            pdf_path: PDF 파일 경로
+            output_path: 번역 결과를 저장할 마크다운 파일 경로. 제공되지 않으면 결과만 반환합니다.
+            target_language: 번역할 대상 언어 (기본값: 한국어)
+            save_images: 이미지를 별도의 파일로 저장할지 여부 (기본값: True)
+            
+        Returns:
+            마크다운 형식으로 변환된 번역 텍스트
+        """
+        # PDF 요소 추출
+        print(f"PDF 요소 추출 중...")
+        pages_elements = self.extract_page_elements(pdf_path)
+        markdown_results = []
+        
+        # 이미지 저장을 위한 디렉토리 생성
+        images_dir = None
+        base_filename = None
+        
+        if output_path and save_images:
+            base_filename = os.path.splitext(os.path.basename(output_path))[0]
+            output_dir = os.path.dirname(output_path) if os.path.dirname(output_path) else '.'
+            
+            # 이미지 디렉토리 생성
+            images_dir = os.path.join(output_dir, f"{base_filename}_images")
+            os.makedirs(images_dir, exist_ok=True)
+            print(f"이미지를 다음 디렉토리에 저장합니다: {images_dir}")
+        
+        print(f"PDF 마크다운 번역 중... ({len(pages_elements)}페이지)")
+        
+        for page_elements in tqdm(pages_elements, desc="번역 중"):
+            page_num = page_elements["page_num"]
+            img_data = page_elements["page_image"]
+            
+            # 이미지 태그 생성 및 이미지 저장
+            image_tag = None
+            if save_images and images_dir and base_filename:
+                # 페이지별 이미지 파일 저장
+                image_filename = f"{base_filename}_page_{page_num}.png"
+                image_path = os.path.join(images_dir, image_filename)
+                
+                # 상대 경로 설정 (마크다운에서 참조용)
+                rel_image_path = os.path.join(f"{base_filename}_images", image_filename)
+                image_tag = rel_image_path
+                
+                # 이미지 저장
+                with open(image_path, 'wb') as f:
+                    f.write(img_data)
+            
+            # 페이지 이미지를 사용하여 마크다운 번역 수행
+            markdown_text = self.gemini_client.translate_to_markdown(
+                img_data, 
+                target_language=target_language, 
+                page_num=page_num,
+                image_tag=image_tag
+            )
+            
+            # 개별 이미지 처리 및 저장
+            page_images = page_elements.get("images", [])
+            if save_images and images_dir and base_filename and page_images:
+                # 이미지 참조를 저장하기 위한 딕셔너리
+                saved_images = {}
+                
+                for img_idx, img_info in enumerate(page_images):
+                    # 개별 이미지 파일 저장
+                    img_filename = f"{base_filename}_page_{page_num}_fig_{img_idx+1}.{img_info['extension']}"
+                    img_path = os.path.join(images_dir, img_filename)
+                    rel_img_path = os.path.join(f"{base_filename}_images", img_filename)
+                    
+                    # 이미지 키를 저장 (마크다운 교체용)
+                    saved_images[f"IMAGE_{page_num}_{img_idx+1}"] = rel_img_path
+                    
+                    # 이미지 저장
+                    with open(img_path, 'wb') as f:
+                        f.write(img_info["bytes"])
+                
+                # 마크다운 내 이미지 참조 업데이트 (이미 GeminiClient에서 처리됨)
+                # 이 부분은 필요하지 않습니다.
+            
+            markdown_results.append((page_num, markdown_text))
+        
+        # 마크다운 결과를 파일로 결합
+        combined_markdown = ""
+        
+        for page_num, markdown in sorted(markdown_results):
+            # 페이지 구분 추가
+            if page_num > 1:
+                combined_markdown += "\n\n---\n\n"  # 페이지 구분선
+            
+            # 페이지 번호 헤더 추가
+            combined_markdown += f"# 페이지 {page_num}\n\n"
+            
+            # 번역된 마크다운 추가
+            combined_markdown += markdown + "\n"
+        
+        # 결과를 파일로 저장
+        if output_path:
+            with open(output_path, 'w', encoding='utf-8') as file:
+                file.write(combined_markdown)
+            print(f"번역된 마크다운이 저장되었습니다: {output_path}")
+            if save_images and images_dir:
+                print(f"관련 이미지가 저장되었습니다: {images_dir}")
+        
+        return combined_markdown
+    
     def _create_translated_pdf_with_images(self, translated_results: List[Tuple[int, str, Dict[str, Any]]], output_path: str):
         """
         번역 결과와 원본 이미지를 포함한 PDF 파일을 생성합니다.
@@ -485,8 +594,7 @@ class PDFProcessor:
                         os.unlink(temp_file)
                 except Exception as e:
                     print(f"임시 파일 삭제 중 오류 발생: {e}")
-                    # 오류가 있어도 계속 진행
-    
+            
     def _create_layout_preserved_pdf(self, original_pdf_path: str, translated_results: List[Tuple[int, str, Dict[str, Any]]], output_path: str):
         """
         원본 PDF의 레이아웃을 최대한 유지하면서 번역된 PDF를 생성합니다.

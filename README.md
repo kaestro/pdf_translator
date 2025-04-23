@@ -7,8 +7,9 @@ Gemini API를 사용하여 PDF 문서를 한국어로 번역하는 프로그램�
 - PDF 파일에서 텍스트 추출
 - 멀티모달 기능을 통한 PDF 이미지 번역 (레이아웃, 그림, 도표 등 포함)
 - Gemini API를 사용한 텍스트 및 이미지 번역
-- 번역 결과를 텍스트 또는 PDF 파일로 저장
+- 번역 결과를 텍스트, PDF 또는 마크다운 파일로 저장
 - 원본 PDF의 이미지를 보존하여 번역된 PDF에 포함
+- 마크다운 출력 시 이미지 파일 자동 저장 및 참조 처리
 - 한국어 폰트 지원 (운영체제별 자동 감지 또는 수동 설정)
 - 다양한 Gemini 모델 지원
 
@@ -89,6 +90,12 @@ python main.py your_pdf_file.pdf --text-only
 # 멀티모달 모드에서 PDF 출력
 python main.py your_pdf_file.pdf --pdf-output
 
+# 마크다운 형식으로 번역 결과 저장
+python main.py your_pdf_file.pdf --markdown
+
+# 마크다운 형식으로 번역하되 이미지 저장 비활성화
+python main.py your_pdf_file.pdf --markdown --no-images
+
 # 출력 파일 지정
 python main.py your_pdf_file.pdf -o translated_output.txt
 
@@ -121,10 +128,41 @@ python main.py --list-models
   python main.py your_pdf_file.pdf -o output.txt
   ```
 
-- **PDF 파일 (멀티모달 모드에서만 가능)**: 번역 결과를 PDF 파일로 저장합니다. 한국어 폰트가 지원되며, 원본 이미지가 보존됩니다.
+- **PDF 파일**: 번역 결과를 PDF 파일로 저장합니다. 한국어 폰트가 지원되며, 원본 이미지가 보존됩니다.
   ```bash
   python main.py your_pdf_file.pdf --pdf-output
   ```
+
+- **마크다운 파일**: 번역 결과를 마크다운 형식으로 저장합니다. 원본 구조를 최대한 유지하면서 마크다운 형식(제목, 목록, 강조 등)으로 변환합니다. 기본적으로 이미지도 함께 저장됩니다.
+  ```bash
+  python main.py your_pdf_file.pdf --markdown
+  ```
+
+### 마크다운 출력
+
+마크다운 모드를 사용하면 PDF의 내용을 구조화된 마크다운 문서로 변환할 수 있습니다:
+
+- 각 페이지는 마크다운 문서에서 구분선(---)으로 분리됩니다.
+- 제목, 목록, 표 등의 형식이 마크다운으로 변환됩니다.
+- 이미지는 별도의 디렉토리(`<출력파일명>_images/`)에 저장되고 마크다운에서 참조됩니다.
+- `--no-images` 옵션을 사용하면 이미지 저장을 비활성화할 수 있습니다.
+
+마크다운 모드 사용 예:
+```bash
+# 기본 사용법 (이미지 저장)
+python main.py your_pdf_file.pdf --markdown
+
+# 지정된 경로에 마크다운 파일 저장
+python main.py your_pdf_file.pdf --markdown -o result.md
+
+# 이미지 저장 없이 마크다운만 생성
+python main.py your_pdf_file.pdf --markdown --no-images
+```
+
+마크다운 출력은 다음과 같은 경우에 유용합니다:
+- PDF 내용을 웹 페이지로 변환하고 싶을 때
+- 문서를 GitHub 등의 플랫폼에서 쉽게 공유하고 싶을 때
+- PDF의 내용을 다른 마크다운 기반 도구로 가져가고 싶을 때
 
 ### 이미지 처리
 
@@ -133,6 +171,11 @@ python main.py --list-models
 - 모든 이미지는 원본 형식과 비율을 유지합니다.
 - 페이지당 이미지가 많은 경우 PDF 크기가 커질 수 있습니다.
 - 텍스트와 이미지가 함께 표시됩니다.
+
+마크다운 모드에서는:
+- 이미지를 별도의 디렉토리에 저장합니다.
+- 페이지 전체 이미지와 개별 이미지를 모두 저장합니다.
+- 마크다운 문서에서 이미지를 참조합니다.
 
 ### 한국어 폰트 문제 해결
 

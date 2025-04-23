@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch, MagicMock, mock_open
 from pdf_translator.pdf_processor import PDFProcessor
 from pdf_translator.gemini_client import GeminiClient
+import tempfile
 
 class TestPDFProcessor(unittest.TestCase):
     """
@@ -245,6 +246,107 @@ class TestPDFProcessor(unittest.TestCase):
             
             # 파일 열기 확인
             mock_open_file.assert_called_once_with("output.pdf", 'wb')
+    
+    @patch('pdf_translator.pdf_processor.PDFProcessor.extract_page_elements')
+    def test_translate_to_markdown(self, mock_extract_elements):
+        """마크다운 번역 메서드 테스트"""
+        # 추출된 페이지 요소 목 설정
+        mock_page1 = {
+            "page_num": 1,
+            "width": 595,
+            "height": 842,
+            "text": "Page 1 text",
+            "page_image": b"page1_image_data",
+            "images": [
+                {
+                    "index": 0,
+                    "xref": 123,
+                    "bytes": b"image1_data",
+                    "rect": {"width": 100, "height": 100, "x0": 10, "y0": 10, "x1": 110, "y1": 110},
+                    "extension": "png"
+                }
+            ]
+        }
+        
+        mock_extract_elements.return_value = [mock_page1]
+        
+        # GeminiClient의 translate_to_markdown 메서드 목 설정
+        self.mock_gemini_client.translate_to_markdown.return_value = "# 번역된 마크다운\n\n이것은 **테스트** 마크다운입니다.\n\n![이미지](test_translated_images/test_translated_page_1.png)"
+        
+        # 임시 디렉토리에서 테스트 실행
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "test_translated.md")
+            
+            # 번역 수행
+            result = self.pdf_processor.translate_to_markdown(
+                pdf_path="test.pdf",
+                output_path=output_path,
+                target_language="한국어"
+            )
+            
+            # 결과 확인
+            self.assertIn("# 페이지 1", result)
+            self.assertIn("번역된 마크다운", result)
+            self.assertIn("이것은 **테스트** 마크다운입니다", result)
+            
+            # 파일 생성 확인
+            self.assertTrue(os.path.exists(output_path))
+            
+            # 이미지 디렉토리 생성 확인
+            images_dir = os.path.join(temp_dir, "test_translated_images")
+            self.assertTrue(os.path.exists(images_dir))
+            
+            # GeminiClient의 translate_to_markdown 호출 확인
+            self.mock_gemini_client.translate_to_markdown.assert_called_once()
+    
+    @patch('pdf_translator.pdf_processor.PDFProcessor.extract_page_elements')
+    def test_translate_to_markdown_without_images(self, mock_extract_elements):
+        """이미지 저장 없이 마크다운 번역 메서드 테스트"""
+        # 추출된 페이지 요소 목 설정
+        mock_page1 = {
+            "page_num": 1,
+            "width": 595,
+            "height": 842,
+            "text": "Page 1 text",
+            "page_image": b"page1_image_data",
+            "images": []
+        }
+        
+        mock_extract_elements.return_value = [mock_page1]
+        
+        # GeminiClient의 translate_to_markdown 메서드 목 설정
+        self.mock_gemini_client.translate_to_markdown.return_value = "# 번역된 마크다운\n\n이것은 **테스트** 마크다운입니다."
+        
+        # 임시 디렉토리에서 테스트 실행
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "test_translated.md")
+            
+            # 번역 수행 (save_images=False)
+            result = self.pdf_processor.translate_to_markdown(
+                pdf_path="test.pdf",
+                output_path=output_path,
+                target_language="한국어",
+                save_images=False
+            )
+            
+            # 결과 확인
+            self.assertIn("# 페이지 1", result)
+            self.assertIn("번역된 마크다운", result)
+            
+            # 파일 생성 확인
+            self.assertTrue(os.path.exists(output_path))
+            
+            # 이미지 디렉토리가 생성되지 않았는지 확인
+            images_dir = os.path.join(temp_dir, "test_translated_images")
+            self.assertFalse(os.path.exists(images_dir))
+            
+            # GeminiClient의 translate_to_markdown 호출 확인 (image_tag=None으로 호출되어야 함)
+            self.mock_gemini_client.translate_to_markdown.assert_called_once_with(
+                b"page1_image_data", 
+                target_language="한국어", 
+                page_num=1,
+                image_tag=None
+            )
 
 if __name__ == "__main__":
     unittest.main() 

@@ -43,6 +43,8 @@ def main():
     parser.add_argument("--list-models", action="store_true", help="사용 가능한 모델 목록 표시")
     parser.add_argument("--text-only", action="store_true", help="텍스트만 추출하여 번역 (멀티모달 번역 비활성화)")
     parser.add_argument("--pdf-output", action="store_true", help="번역 결과를 PDF 파일로 저장 (멀티모달 모드에서만 사용 가능)")
+    parser.add_argument("--markdown", action="store_true", help="번역 결과를 마크다운 형식으로 저장 (멀티모달 모드에서만 사용 가능)")
+    parser.add_argument("--no-images", action="store_false", dest="save_images", default=True, help="마크다운 모드에서 이미지를 저장하지 않음")
     parser.add_argument("--preserve-layout", action="store_true", default=True, help="원본 PDF의 레이아웃을 최대한 보존 (기본값: 활성화)")
     parser.add_argument("--no-preserve-layout", action="store_false", dest="preserve_layout", help="원본 PDF의 레이아웃을 보존하지 않음")
     
@@ -71,8 +73,12 @@ def main():
     if not output_path:
         base_name = os.path.basename(args.pdf_file)
         file_name = os.path.splitext(base_name)[0]
+        
+        # 마크다운 출력 옵션이 사용된 경우 마크다운 확장자 사용
+        if args.markdown:
+            output_path = f"{file_name}_translated.md"
         # 멀티모달 모드와 PDF 출력 옵션이 사용된 경우 PDF 출력 확장자 사용
-        if not args.text_only and args.pdf_output:
+        elif not args.text_only and args.pdf_output:
             output_path = f"{file_name}_translated.pdf"
         else:
             output_path = f"{file_name}_translated.txt"
@@ -100,6 +106,21 @@ def main():
                 pdf_path=args.pdf_file,
                 output_path=output_path,
                 target_language=args.language
+            )
+            print(f"번역이 완료되었습니다. 결과는 {output_path}에 저장되었습니다.")
+        elif args.markdown:
+            print("마크다운 모드로 번역을 시작합니다...")
+            
+            # 확장자 확인 및 수정
+            if not output_path.lower().endswith('.md'):
+                output_path = os.path.splitext(output_path)[0] + '.md'
+                print(f"마크다운 출력 옵션이 지정되어 출력 파일을 {output_path}로 변경합니다.")
+            
+            pdf_processor.translate_to_markdown(
+                pdf_path=args.pdf_file,
+                output_path=output_path,
+                target_language=args.language,
+                save_images=args.save_images
             )
             print(f"번역이 완료되었습니다. 결과는 {output_path}에 저장되었습니다.")
         else:
