@@ -8,6 +8,7 @@ Gemini API를 사용하여 PDF 문서를 한국어로 번역하는 프로그램�
 - 멀티모달 기능을 통한 PDF 이미지 번역 (레이아웃, 그림, 도표 등 포함)
 - Gemini API를 사용한 텍스트 및 이미지 번역
 - 번역 결과를 텍스트 또는 PDF 파일로 저장
+- 한국어 폰트 지원 (운영체제별 자동 감지 또는 수동 설정)
 - 다양한 Gemini 모델 지원
 
 ## 설치 방법
@@ -31,7 +32,9 @@ pip install uv
 uv pip install -e .
 ```
 
-## API 키 설정
+## API 키 및 환경 설정
+
+### API 키 설정
 
 Gemini API를 사용하기 위해서는 API 키가 필요합니다. 다음 방법 중 하나로 API 키를 설정하세요:
 
@@ -53,6 +56,25 @@ Gemini API를 사용하기 위해서는 API 키가 필요합니다. 다음 방�
    ```bash
    python main.py your_pdf_file.pdf --api-key your_gemini_api_key_here
    ```
+
+### 운영체제 설정 (한글 폰트용)
+
+프로그램은 자동으로 운영체제를 감지하여 적절한 한글 폰트를 사용합니다. 그러나 수동으로 운영체제를 지정하려면 `.env` 파일에 다음과 같이 설정할 수 있습니다:
+
+```
+CURRENT_OS=windows  # 윈도우 (맑은 고딕 폰트 사용)
+CURRENT_OS=macos    # macOS (애플고딕 폰트 사용)
+CURRENT_OS=linux    # 리눅스 (나눔고딕 폰트 사용, 미리 설치 필요)
+```
+
+리눅스에서 나눔고딕 폰트를 설치하는 방법:
+```bash
+# Ubuntu/Debian 계열
+sudo apt-get install fonts-nanum
+
+# Fedora/CentOS 계열
+sudo dnf install google-nanum-gothic-fonts
+```
 
 ## 사용 방법
 
@@ -98,10 +120,19 @@ python main.py --list-models
   python main.py your_pdf_file.pdf -o output.txt
   ```
 
-- **PDF 파일 (멀티모달 모드에서만 가능)**: 번역 결과를 PDF 파일로 저장합니다.
+- **PDF 파일 (멀티모달 모드에서만 가능)**: 번역 결과를 PDF 파일로 저장합니다. 한국어 폰트가 지원됩니다.
   ```bash
   python main.py your_pdf_file.pdf --pdf-output
   ```
+
+### 한국어 폰트 문제 해결
+
+PDF 출력에서 한국어가 깨지는 경우:
+
+1. `.env` 파일에 `CURRENT_OS` 환경변수가 정확히 설정되었는지 확인하세요.
+2. 콘솔 출력을 확인하여 폰트 등록 성공 여부를 확인하세요.
+3. 리눅스 사용자는 나눔고딕 폰트가 설치되어 있는지 확인하세요.
+4. 자신의 환경에 맞는 폰트 경로를 수동으로 설정하려면 `pdf_translator/pdf_processor.py` 파일의 `FONT_CONFIG` 딕셔너리를 수정하세요.
 
 ### 사용 가능한 주요 모델
 
