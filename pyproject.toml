@@ -8,7 +8,9 @@ dependencies = [
     "google-generativeai",
     "python-dotenv",
     "pypdf2",
-    "tqdm"
+    "tqdm",
+    "pymupdf",
+    "reportlab"
 ]
 
 [build-system]

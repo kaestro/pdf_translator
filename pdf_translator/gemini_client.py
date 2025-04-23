@@ -6,7 +6,8 @@ Gemini API 클라이언트 모듈
 """
 
 import os
-from typing import Optional, Dict, Any
+import base64
+from typing import Optional, Dict, Any, Union, BinaryIO
 import google.generativeai as genai
 from dotenv import load_dotenv
 from .gemini_models import GeminiModel
@@ -36,10 +37,12 @@ class GeminiClient:
         genai.configure(api_key=self.api_key)
         
         # 모델 설정
-        model_id = model_name if model_name else GeminiModel.GEMINI_2_5_FLASH.value
-        self.model = genai.GenerativeModel(model_id)
+        self.text_model_id = model_name if model_name else GeminiModel.GEMINI_1_5_FLASH.value
+        self.vision_model_id = GeminiModel.GEMINI_1_5_FLASH.value
+        self.text_model = genai.GenerativeModel(self.text_model_id)
+        self.vision_model = genai.GenerativeModel(self.vision_model_id)
     
-    def translate(self, text: str, target_language: str = "한국어") -> str:
+    def translate_text_only(self, text: str, target_language: str = "한국어") -> str:
         """
         텍스트를 대상 언어로 번역합니다.
         
@@ -57,7 +60,48 @@ class GeminiClient:
         {text}
         """
         
-        response = self.model.generate_content(prompt)
+        response = self.text_model.generate_content(prompt)
+        
+        # 응답 확인 및 반환
+        if hasattr(response, 'text'):
+            return response.text
+        else:
+            raise ValueError("API 응답에서 텍스트를 찾을 수 없습니다.")
+    
+    def translate(self, content: Union[str, bytes, BinaryIO], target_language: str = "한국어", text_only: bool = False) -> str:
+        """
+        텍스트 또는 이미지를 대상 언어로 번역합니다.
+        
+        Args:
+            content: 번역할 텍스트 또는 이미지 데이터
+            target_language: 번역할 대상 언어 (기본값: 한국어)
+            text_only: 텍스트만 처리할지 여부 (기본값: False)
+            
+        Returns:
+            번역된 텍스트
+        """
+        if text_only or isinstance(content, str):
+            return self.translate_text_only(content if isinstance(content, str) else content.decode('utf-8'), target_language)
+        
+        # 이미지 데이터 처리
+        prompt = f"""다음 이미지에 있는 모든 텍스트를 {target_language}로 번역해주세요.
+        원본 텍스트의 의미와 맥락을 정확하게 유지하면서 자연스러운 {target_language}로 번역하세요.
+        번역된 텍스트만 제공해주세요. 원본 텍스트는 포함하지 마세요.
+        """
+        
+        # 이미지 데이터 준비
+        if isinstance(content, bytes):
+            image_data = content
+        elif hasattr(content, 'read'):
+            image_data = content.read()
+        else:
+            raise ValueError("지원되지 않는 콘텐츠 형식입니다.")
+        
+        # 멀티모달 요청 생성
+        response = self.vision_model.generate_content([
+            prompt,
+            {"mime_type": "image/png", "data": image_data}
+        ])
         
         # 응답 확인 및 반환
         if hasattr(response, 'text'):

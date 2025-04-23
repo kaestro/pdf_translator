@@ -41,6 +41,8 @@ def main():
                       default="GEMINI_1_5_FLASH", 
                       help="사용할 Gemini 모델 (기본값: GEMINI_1_5_FLASH)")
     parser.add_argument("--list-models", action="store_true", help="사용 가능한 모델 목록 표시")
+    parser.add_argument("--text-only", action="store_true", help="텍스트만 추출하여 번역 (멀티모달 번역 비활성화)")
+    parser.add_argument("--pdf-output", action="store_true", help="번역 결과를 PDF 파일로 저장 (멀티모달 모드에서만 사용 가능)")
     
     args = parser.parse_args()
     
@@ -67,7 +69,11 @@ def main():
     if not output_path:
         base_name = os.path.basename(args.pdf_file)
         file_name = os.path.splitext(base_name)[0]
-        output_path = f"{file_name}_translated.txt"
+        # 멀티모달 모드와 PDF 출력 옵션이 사용된 경우 PDF 출력 확장자 사용
+        if not args.text_only and args.pdf_output:
+            output_path = f"{file_name}_translated.pdf"
+        else:
+            output_path = f"{file_name}_translated.txt"
     
     try:
         # 선택한 모델 확인
@@ -86,13 +92,30 @@ def main():
         pdf_processor = PDFProcessor(gemini_client=gemini_client)
         
         # PDF 번역
-        pdf_processor.translate_pdf(
-            pdf_path=args.pdf_file,
-            output_path=output_path,
-            target_language=args.language
-        )
+        if args.text_only:
+            print("텍스트 추출 모드로 번역을 시작합니다...")
+            pdf_processor.translate_text_only(
+                pdf_path=args.pdf_file,
+                output_path=output_path,
+                target_language=args.language
+            )
+            print(f"번역이 완료되었습니다. 결과는 {output_path}에 저장되었습니다.")
+        else:
+            print("멀티모달 모드로 번역을 시작합니다...")
+            
+            # PDF 출력 옵션이 사용되지 않았고 출력 확장자가 .pdf가 아닌 경우, 확장자 변경
+            if args.pdf_output and not output_path.lower().endswith('.pdf'):
+                output_path = os.path.splitext(output_path)[0] + '.pdf'
+                print(f"PDF 출력 옵션이 지정되어 출력 파일을 {output_path}로 변경합니다.")
+            
+            pdf_processor.translate(
+                pdf_path=args.pdf_file,
+                output_path=output_path,
+                target_language=args.language,
+                text_only=False
+            )
+            print(f"번역이 완료되었습니다. 결과는 {output_path}에 저장되었습니다.")
         
-        print(f"번역이 완료되었습니다. 결과는 {output_path}에 저장되었습니다.")
         return 0
         
     except KeyError as e:
