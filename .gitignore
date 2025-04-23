@@ -1,0 +1,8 @@
+.env
+.venv
+*.pdf
+*.txt
+*.pdf_translated.txt
+*.pdf_translated.pdf
+*.pdf_translated.txt
+*.pdf_translated.pdf
